@@ -16,12 +16,13 @@ public class Playlist {
     private String name;
     private int currentIndex;
 
-     public Playlist(int id, User user, String name) {
+     public Playlist(int id, User user, String name, List<Song> songs) {
         this.id = id;
         this.user = user;
-        this.songs = new ArrayList<>();
+        this.songs = songs;
         this.name = name;
     }
+
 
     public void add(Song song1) {
         songs.add(song1);

@@ -1,8 +1,9 @@
 package spotify.service.events;
 
-import spotify.models.Playable;
+import spotify.models.CurrentPlay;
 
 public interface PlayerEventListener {
-    void onTrackStarted(Playable track);
-    void onTrackSeeked(Playable track, int positionSeconds);
+    // Events now emit rich, contextual domain snapshots
+    void onPlaybackSessionStarted(CurrentPlay session);
+    void onPlaybackSessionMutated(CurrentPlay session);
 }
