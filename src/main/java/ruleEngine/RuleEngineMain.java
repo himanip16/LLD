@@ -1,36 +1,60 @@
 package ruleEngine;
 
-import ruleEngine.composites.AndCompositeRule;
+import ruleEngine.core.Expression;
+import ruleEngine.core.Rule;
+import ruleEngine.expressions.AndExpression;
+import ruleEngine.expressions.EqualsExpression;
+import ruleEngine.expressions.GreaterThanExpression;
+import ruleEngine.expressions.OrExpression;
 import ruleEngine.models.Facts;
-import ruleEngine.rules.PremiumUserRule;
-import ruleEngine.rules.RestrictiveCountryRule;
 import ruleEngine.service.RuleEngine;
 
 public class RuleEngineMain {
+
     public static void main(String[] args) {
         RuleEngine engine = new RuleEngine();
 
-        // 1. Compose a compound rule pipeline dynamically: (Is Premium AND In Restricted Region)
-        AndCompositeRule securityAlertPipeline = new AndCompositeRule()
-                .add(new PremiumUserRule())
-                .add(new RestrictiveCountryRule());
+        // 1. Build the Hierarchical Expression Tree:
+        // (Age > 25 AND Income > 50000) OR IsVIP == true
+        Expression ageCondition = new GreaterThanExpression("age", 25);
+        Expression incomeCondition = new GreaterThanExpression("income", 50000);
 
-        engine.registerRule(securityAlertPipeline);
+        Expression compoundAnd = new AndExpression(ageCondition, incomeCondition);
+        Expression vipCondition = new EqualsExpression("isVIP", true);
 
-        // 2. Scenario A: User matches all criteria of the composite rule
-        System.out.println("=== Running Evaluation Context A ===");
-        Facts contextA = new Facts();
-        contextA.put("isPremium", true);
-        contextA.put("country", "RESTRICTED_REGION");
+        Expression finalRootExpression = new OrExpression(compoundAnd, vipCondition);
 
-        engine.evaluateAll(contextA);
+        // 2. Wrap it inside a functional, reusable Rule object
+        Rule premiumDiscountRule = new Rule(
+                "Premium Holiday Discount Promotion",
+                finalRootExpression,
+                () -> System.out.println("🎉 Applied a flat 20% discount package to account checkout context!")
+        );
 
-        // 3. Scenario B: User only matches one criteria (Rule should safely evaluate to false)
-        System.out.println("\n=== Running Evaluation Context B ===");
-        Facts contextB = new Facts();
-        contextB.put("isPremium", true);
-        contextB.put("country", "INDIA");
+        engine.registerRule(premiumDiscountRule);
 
-        engine.evaluateAll(contextB); // Will remain silent because the AND criteria failed
+        // --- SCENARIO A: Meets the AND criteria (Age > 25 and Income > 50000), not a VIP
+        System.out.println("=== Testing Customer Profile A ===");
+        Facts customerA = new Facts();
+        customerA.put("age", 30);
+        customerA.put("income", 75000);
+        customerA.put("isVIP", false);
+        engine.evaluateAndExecute(customerA);
+
+        // --- SCENARIO B: Fails the AND criteria (Low income) but passes via VIP fallback
+        System.out.println("\n=== Testing Customer Profile B ===");
+        Facts customerB = new Facts();
+        customerB.put("age", 21);
+        customerB.put("income", 12000);
+        customerB.put("isVIP", true);
+        engine.evaluateAndExecute(customerB);
+
+        // --- SCENARIO C: Fails both paths entirely
+        System.out.println("\n=== Testing Customer Profile C ===");
+        Facts customerC = new Facts();
+        customerC.put("age", 19);
+        customerC.put("income", 20000);
+        customerC.put("isVIP", false);
+        engine.evaluateAndExecute(customerC); // Will print nothing
     }
 }
