@@ -15,16 +15,22 @@ public class LFUEvictionPolicy<K> implements EvictionPolicy<K> {
 
     @Override
     public void keyAccessed(K key) {
-        int currentFreq = keyToFrequency.get(key);
+        Integer currentFreq = keyToFrequency.get(key);
+        if (currentFreq == null) return; // Guard clause against uninserted keys
+
         int newFreq = currentFreq + 1;
         keyToFrequency.put(key, newFreq);
 
-        // Move key out of current frequency bucket
-        frequencyToKeys.get(currentFreq).remove(key);
-        if (frequencyToKeys.get(currentFreq).isEmpty()) {
-            frequencyToKeys.remove(currentFreq);
-            if (currentFreq == minFrequency) {
-                minFrequency++;
+        // Move key out of the old frequency bucket
+        LinkedHashSet<K> oldBucket = frequencyToKeys.get(currentFreq);
+        if (oldBucket != null) {
+            oldBucket.remove(key);
+            if (oldBucket.isEmpty()) {
+                frequencyToKeys.remove(currentFreq);
+                // If the emptied bucket was the global minimum frequency, update the pointer
+                if (currentFreq == minFrequency) {
+                    minFrequency++;
+                }
             }
         }
 
@@ -34,28 +40,45 @@ public class LFUEvictionPolicy<K> implements EvictionPolicy<K> {
 
     @Override
     public void keyInserted(K key) {
+        if (key == null) throw new IllegalArgumentException("Key cannot be null");
+
+        // FIX: If key already exists, route to keyAccessed to prevent state corruption
+        if (keyToFrequency.containsKey(key)) {
+            keyAccessed(key);
+            return;
+        }
+
+        // Fresh insertion
         keyToFrequency.put(key, 1);
         frequencyToKeys.computeIfAbsent(1, k -> new LinkedHashSet<>()).add(key);
-        minFrequency = 1;
+        minFrequency = 1; // Safely set to 1 because a brand new item has a frequency of 1
     }
 
     @Override
     public void keyRemoved(K key) {
         Integer freq = keyToFrequency.remove(key);
         if (freq != null) {
-            frequencyToKeys.get(freq).remove(key);
-            if (frequencyToKeys.get(freq).isEmpty()) {
-                frequencyToKeys.remove(freq);
+            LinkedHashSet<K> bucket = frequencyToKeys.get(freq);
+            if (bucket != null) {
+                bucket.remove(key);
+                if (bucket.isEmpty()) {
+                    frequencyToKeys.remove(freq);
+                    // Note: If you remove the minFrequency item, your parent Cache's put()
+                    // method will immediately insert a new item right after, resetting minFrequency to 1.
+                }
             }
         }
     }
 
     @Override
     public K evictKey() {
-        if (frequencyToKeys.isEmpty()) return null;
+        if (keyToFrequency.isEmpty()) return null;
 
         LinkedHashSet<K> keysWithMinFreq = frequencyToKeys.get(minFrequency);
-        K leastFrequentlyUsedKey = keysWithMinFreq.iterator().next(); // Gets the oldest element (FIFO within frequency tie)
+        if (keysWithMinFreq == null || keysWithMinFreq.isEmpty()) return null;
+
+        // LinkedHashSet iterator guarantees FIFO order (oldest inserted key in this frequency tie)
+        K leastFrequentlyUsedKey = keysWithMinFreq.iterator().next();
 
         keysWithMinFreq.remove(leastFrequentlyUsedKey);
         if (keysWithMinFreq.isEmpty()) {
