@@ -1,12 +1,17 @@
 package ruleEngine.composites;
 
+import ruleEngine.core.Expression;
 import ruleEngine.core.Rule;
 import ruleEngine.models.Facts;
 import java.util.ArrayList;
 import java.util.List;
 
-public class AndCompositeRule implements Rule {
+public class AndCompositeRule extends Rule {
     private final List<Rule> childRules = new ArrayList<>();
+
+    public AndCompositeRule(String name, Expression rootExpression, Runnable action) {
+        super(name, rootExpression, action);
+    }
 
     public AndCompositeRule add(Rule rule) {
         childRules.add(rule);

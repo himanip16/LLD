@@ -15,7 +15,7 @@ public class RuleEngine {
         for (Rule rule : businessRules) {
             if (rule.evaluate(facts)) {
                 System.out.print("Rule [" + rule.getName() +"] passed! Triggering -> ");
-                rule.execute();
+                rule.execute(facts);
             }
         }
     }

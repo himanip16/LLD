@@ -1,35 +1,41 @@
 package meetingRoomScheduler.model;
 
+import java.util.ArrayList;
 import java.util.List;
 
+// Meeting.java
 public class Meeting {
     private final String id;
-    private final String title;
-    private final TimeSlot slot;
-    private final Room room;
-    private final List<User> attendees;
+    private final long startTime;
+    private final long endTime;
+    private final List<String> participants;
+    private final String organizedBy;
 
-    public Meeting(String id, String title, TimeSlot slot, Room room, List<User> attendees) {
+    public Meeting(String id, long startTime, long endTime, List<String> participants, String organizedBy) {
         this.id = id;
-        this.title = title;
-        this.slot = slot;
-        this.room = room;
-        this.attendees = attendees;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.participants = new ArrayList<>(participants);
+        this.organizedBy = organizedBy;
     }
 
-    public TimeSlot getSlot() {
-        return slot;
+    public String getId() {
+        return id;
     }
 
-    public List<User> getAttendees() {
-        return attendees;
+    public long getStartTime() {
+        return startTime;
     }
 
-    public String getTitle() {
-        return title;
+    public long getEndTime() {
+        return endTime;
     }
 
-    public Room getRoom() {
-        return room;
+    public List<String> getParticipants() {
+        return participants;
+    }
+
+    public String getOrganizedBy() {
+        return organizedBy;
     }
 }

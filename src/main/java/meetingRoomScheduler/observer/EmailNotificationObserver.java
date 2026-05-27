@@ -3,12 +3,13 @@ package meetingRoomScheduler.observer;
 import meetingRoomScheduler.model.Meeting;
 import meetingRoomScheduler.model.User;
 
+
+// EmailNotificationObserver.java
 public class EmailNotificationObserver implements NotificationObserver {
     @Override
-    public void onMeetingBooked(Meeting meeting) {
-        for (User attendee : meeting.getAttendees()) {
-            System.out.println("Sending Email to " + attendee.getEmail() +
-                    ": Invitation for '" + meeting.getTitle() + "' in room " + meeting.getRoom().getName());
-        }
+    public void sendNotification(Meeting meeting) {
+        // Simulating sending notification asynchronously
+        System.out.println("[Notification] Email sent to participants " + meeting.getParticipants()
+                + " for meeting ID: " + meeting.getId());
     }
 }

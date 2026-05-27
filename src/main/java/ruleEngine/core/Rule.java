@@ -20,7 +20,7 @@ public class Rule {
         return rootExpression.interpret(facts);
     }
 
-    public void execute() {
+    public void execute(Facts facts) {
         action.run();
     }
 

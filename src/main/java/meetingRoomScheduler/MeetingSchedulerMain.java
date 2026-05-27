@@ -1,15 +1,11 @@
 package meetingRoomScheduler;
 
-import meetingRoomScheduler.model.Meeting;
-import meetingRoomScheduler.model.Room;
-import meetingRoomScheduler.model.TimeSlot;
-import meetingRoomScheduler.model.User;
+import meetingRoomScheduler.model.BookingRequest;
+import meetingRoomScheduler.model.MeetingRoom;
+import meetingRoomScheduler.model.MeetingRoom;
 import meetingRoomScheduler.observer.EmailNotificationObserver;
-import meetingRoomScheduler.observer.SlackNotificationObserver;
-import meetingRoomScheduler.service.MeetingRoomScheduler;
-import meetingRoomScheduler.strategy.BestFitStrategy;
+import meetingRoomScheduler.service.MeetingScheduler;
 
-import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -18,98 +14,70 @@ import java.util.concurrent.TimeUnit;
 
 public class MeetingSchedulerMain {
 
+
     public static void main(String[] args) throws InterruptedException {
-        System.out.println("=== Initializing Meeting Room Scheduler System ===\n");
-
-        // 1. Setup Sample Data (Predefined Rooms)
-        Room boardRoom = new Room("R1", "Board Room", 15);
-        Room huddlePod = new Room("R2", "Huddle Pod", 4);
-        Room techLab = new Room("R3", "Tech Lab", 10);
-        List<Room> corporateRooms = Arrays.asList(boardRoom, huddlePod, techLab);
-
-        // 2. Initialize Scheduler with Best-Fit Strategy
-        MeetingRoomScheduler scheduler = new MeetingRoomScheduler(corporateRooms, new BestFitStrategy());
-
-        // 3. Attach Notification Observers (Observer Pattern)
-        scheduler.registerNotificationChannel(new EmailNotificationObserver());
-        scheduler.registerNotificationChannel(new SlackNotificationObserver());
-
-        // 4. Create Sample Users
-        User alice = new User("U1", "Alice Smith", "alice@company.com");
-        User bob = new User("U2", "Bob Jones", "bob@company.com");
-        User charlie = new User("U3", "Charlie Brown", "charlie@company.com");
-
-        // 5. Test Case 1: Standard Booking Sequence (Validating Best-Fit)
-        System.out.println("--- Test Case 1: Booking for 3 People (Should choose Huddle Pod) ---");
-        TimeSlot morningSlot = new TimeSlot(
-                LocalDateTime.of(2026, 5, 22, 10, 0),
-                LocalDateTime.of(2026, 5, 22, 11, 0)
+        // 1. Predefine N rooms with variations in size capacities
+        List<MeetingRoom> rooms = Arrays.asList(
+                new MeetingRoom("Room-Small", 5),
+                new MeetingRoom("Room-Medium", 15),
+                new MeetingRoom("Room-Large", 30)
         );
 
-        try {
-            Meeting m1 = scheduler.bookMeeting("Standup Sync", morningSlot, 3, Arrays.asList(alice, bob));
-            System.out.println("Successfully booked: " + m1.getTitle() + " in " + m1.getRoom().getName());
-        } catch (Exception e) {
-            System.err.println("Booking failed: " + e.getMessage());
-        }
-        System.out.println();
+        MeetingScheduler scheduler = new MeetingScheduler(rooms);
+        scheduler.registerObserver(new EmailNotificationObserver());
 
-        // 6. Test Case 2: Concurrent Race Condition Simulation
-        System.out.println("--- Test Case 2: Concurrent Race Condition (2 Users, 1 Room, Same Slot) ---");
+        // 2. Set up Concurrent Thread pool execution environment
+        ExecutorService executorService = Executors.newFixedThreadPool(4);
 
-        // This slot directly overlaps the previous huddle room booking, forcing both users
-        // to look for a remaining room matching a required capacity of 8 (Tech Lab).
-        TimeSlot clashSlot = new TimeSlot(
-                LocalDateTime.of(2026, 5, 22, 10, 30),
-                LocalDateTime.of(2026, 5, 22, 11, 30)
-        );
-
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-
-        // User A trying to book a Architecture Review
-        Runnable bookingTaskA = () -> {
+        // Simulation Task 1: Normal thread booking Room-Small (Slot: 10 to 12)
+        executorService.submit(() -> {
             try {
-                Meeting mA = scheduler.bookMeeting("Architecture Review", clashSlot, 8, Arrays.asList(alice, charlie));
-                System.out.println("[SUCCESS] Thread A booked: " + mA.getTitle() + " in " + mA.getRoom().getName());
+                List<BookingRequest> options = List.of(new BookingRequest(10, 12, 4));
+                scheduler.bookRoom(options, List.of("alex@ts.com", "bob@ts.com"), "OrganizerA");
             } catch (Exception e) {
-                System.out.println("[BLOCKED] Thread A failed to book: " + e.getMessage());
+                System.err.println("[Thread 1 Error] " + e.getMessage());
             }
-        };
+        });
 
-        // User B trying to book a Sprint Planning at the exact same moment
-        Runnable bookingTaskB = () -> {
+        // Simulation Task 2: Race condition contention thread (Trying to book SAME slot: 10 to 12)
+        executorService.submit(() -> {
             try {
-                Meeting mB = scheduler.bookMeeting("Sprint Planning", clashSlot, 8, Arrays.asList(bob, charlie));
-                System.out.println("[SUCCESS] Thread B booked: " + mB.getTitle() + " in " + mB.getRoom().getName());
+                // Sleep slightly to guarantee Task 1 hits lock first
+                Thread.sleep(50);
+                List<BookingRequest> options = List.of(new BookingRequest(10, 12, 3));
+                // Since Room-Small is booked, this will transparently skip to find another eligible room if capacity matches
+                scheduler.bookRoom(options, List.of("charlie@ts.com"), "OrganizerB");
             } catch (Exception e) {
-                System.out.println("[BLOCKED] Thread B failed to book: " + e.getMessage());
+                System.err.println("[Thread 2 expected redirect/fail] " + e.getMessage());
             }
-        };
+        });
 
-        // Fire threads simultaneously
-        executor.submit(bookingTaskA);
-        executor.submit(bookingTaskB);
-
-        executor.shutdown();
-        executor.awaitTermination(3, TimeUnit.SECONDS);
-        System.out.println();
-
-        // 7. Test Case 3: Display Today's Room Calendar Schedules
-        System.out.println("--- Test Case 3: Printing Room Schedules for May 22, 2026 ---");
-        LocalDateTime targetDay = LocalDateTime.of(2026, 5, 22, 0, 0);
-
-        for (Room room : corporateRooms) {
-            System.out.println("Schedule for Room [" + room.getName() + "]:");
-            List<Meeting> schedule = scheduler.getRoomSchedule(room.getId(), targetDay);
-            if (schedule.isEmpty()) {
-                System.out.println("  (No meetings scheduled)");
-            } else {
-                for (Meeting m : schedule) {
-                    System.out.println("  - " + m.getSlot().getStartTime().toLocalTime() + " to "
-                            + m.getSlot().getEndTime().toLocalTime() + " : " + m.getTitle());
-                }
+        // Simulation Task 3: Booking execution requesting giant capacity
+        executorService.submit(() -> {
+            try {
+                List<BookingRequest> options = List.of(new BookingRequest(14, 16, 25)); // requires 25 people
+                scheduler.bookRoom(options, List.of("all-hands@ts.com"), "CEO");
+            } catch (Exception e) {
+                System.err.println("[Thread 3 Error] " + e.getMessage());
             }
-        }
+        });
+
+        // Simulation Task 4: Invalid Arguments Handling Check
+        executorService.submit(() -> {
+            try {
+                List<BookingRequest> options = List.of(new BookingRequest(15, 12, 5)); // Start > End
+                scheduler.bookRoom(options, List.of("test@ts.com"), "Tester");
+            } catch (Exception e) {
+                System.out.println("[Thread 4 Expected Exception caught] " + e.getMessage());
+            }
+        });
+
+        executorService.shutdown();
+        executorService.awaitTermination(3, TimeUnit.SECONDS);
+
+        // 3. Print out room state calendars to prove scheduling accuracy
+        scheduler.displayCalendarForRoom("Room-Small");
+        scheduler.displayCalendarForRoom("Room-Medium");
+        scheduler.displayCalendarForRoom("Room-Large");
     }
 }
-

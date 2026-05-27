@@ -1,9 +1,14 @@
 package ruleEngine.rules;
 
+import ruleEngine.core.Expression;
 import ruleEngine.core.Rule;
 import ruleEngine.models.Facts;
 
-public class RestrictiveCountryRule implements Rule {
+public class RestrictiveCountryRule extends Rule {
+    public RestrictiveCountryRule(String name, Expression rootExpression, Runnable action) {
+        super(name, rootExpression, action);
+    }
+
     @Override
     public boolean evaluate(Facts facts) {
         String country = facts.get("country");
