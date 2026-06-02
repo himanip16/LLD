@@ -1,11 +1,17 @@
 package splitswise.model;
 
 
+import lombok.Getter;
+import lombok.Setter;
+import splitswise.exception.UserNotInGroupException;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Setter
+@Getter
 public class Group {
     private String id;
     private String name;
@@ -24,12 +30,6 @@ public class Group {
         }
     }
 
-    public String getId() { return id; }
-    public String getName() { return name; }
-    public List<User> getMembers() { return members; }
-    public List<Expense> getExpenses() { return expenses; }
-    public Map<User, BalanceSheet> getUserBalanceSheets() { return userBalanceSheets; }
-
     public void addMember(User user) {
         if (!members.contains(user)) {
             members.add(user);
@@ -39,5 +39,11 @@ public class Group {
 
     public void addExpense(Expense expense) {
         expenses.add(expense);
+    }
+
+    public void validateMember(User paidBy) {
+        if(!members.contains(paidBy)) {
+            throw new UserNotInGroupException(paidBy.getId());
+        }
     }
 }
