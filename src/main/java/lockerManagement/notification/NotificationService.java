@@ -1,7 +1,9 @@
 package lockerManagement.notification;
 
+import lockerManagement.model.Package;
 public interface NotificationService {
-    void sendPickupCode(String packageId, String secureCode, String tokenId);
-    void sendExpiryAlert(String packageId, String lockerId);
+    void notifyReservationExpired(Package pkg);
+    void notifyPickupSuccess(Package pkg);
+    void notifyExpiry(Package pkg);
+    void notifyTooManyWrongPins(Package pkg);
 }
-

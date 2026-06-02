@@ -1,90 +1,94 @@
 package lockerManagement;
 
+import lockerManagement.exception.InvalidPinException;
+import lockerManagement.exception.InvalidStateTransitionException;
+import lockerManagement.exception.NoSlotAvailableException;
+import lockerManagement.exception.PackageNotFoundException;
 import lockerManagement.model.*;
+import lockerManagement.model.Package;
+import lockerManagement.notification.ConsoleNotificationService;
 import lockerManagement.notification.NotificationService;
-import lockerManagement.notification.SmsNotificationService;
-import lockerManagement.service.LockerManagementSystem;
+import lockerManagement.service.ConsoleReturnService;
+import lockerManagement.service.LockerService;
+import lockerManagement.service.ReturnService;
+import lockerManagement.slotAllocation.BestFitStrategy;
 
-import java.time.LocalDateTime;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 public class LockerMain {
 
-    public static void main(String[] args) {
-        // 1. Initialize Subsystems & Metadata
-        NotificationService notificationService = new SmsNotificationService();
-        LockerManagementSystem lms = new LockerManagementSystem(notificationService);
 
-        Location stationLocation = new Location(12.9716, 77.5946, "td3377"); // Bangalore center coords
+        public static void main(String[] args) {
 
-        // 2. Provision a Locker Bank (Station) with assorted sizes
-        List<Locker> initialLockers = Arrays.asList(
-                new Locker("L-SMALL-01", LockerSize.S, "STN-BLR-01"),
-                new Locker("L-MED-02", LockerSize.M, "STN-BLR-01"),
-                new Locker("L-LARGE-03", LockerSize.L, "STN-BLR-01")
-        );
+            NotificationService notif = new ConsoleNotificationService();
+            ReturnService ret = new ConsoleReturnService();
 
-        LockerStation bangaloreStation = new LockerStation(
-                "STN-BLR-01",
-                "MG Road Metro Station Bank",
-                stationLocation,
-                initialLockers
-        );
+            List<LockerSlot> slots = new ArrayList<>();
+            slots.add(new LockerSlot("S1", Size.SMALL, notif, ret));
+            slots.add(new LockerSlot("S2", Size.SMALL, notif, ret));
+            slots.add(new LockerSlot("M1", Size.MEDIUM, notif, ret));
+            slots.add(new LockerSlot("M2", Size.MEDIUM, notif, ret));
+            slots.add(new LockerSlot("L1", Size.LARGE, notif, ret));
 
-        lms.registerStation(bangaloreStation);
-        System.out.println("=== Locker Station Registered Successfully ===\n");
+            LockerService service = new LockerService(slots, new BestFitStrategy());
 
-        // ====================================================================
-        // SCENARIO A: Standard Happy Path (Reserve -> Dropoff -> Retrieve)
-        // ====================================================================
-        System.out.println("--- Scenario A: Happy Path Flow ---");
+            // --- happy path ---
+            Package smallPkg = new Package("PKG_001", Size.SMALL, "CUST_1");
+            DeliveryReceipt receipt1 = service.assignLocker(smallPkg);
+            System.out.println("Assigned slot: " + receipt1.slotId + " PIN: " + receipt1.pin);
+            // PKG_001 is SMALL -> goes to S1, not M1 or L1
 
-        // Step 1: Customer orders a Medium item. System reserves an optimal locker.
-        String packageA = "PKG-AMZN-998822";
-        LockerToken tokenA = lms.reserveLockerForOrder("STN-BLR-01", packageA, LockerSize.M);
-        System.out.println("Order Placed. Reserved Locker ID: " + tokenA.getLockerId());
+            service.depositPackage("PKG_001");
+            service.pickupPackage("PKG_001", receipt1.pin);   // success
 
-        // Step 2: Courier arrives at the station and inputs the tracking token to drop it off
-        lms.confirmCourierDropoff(tokenA.getTokenId());
+            // --- wrong PIN ---
+            Package medPkg = new Package("PKG_002", Size.MEDIUM, "CUST_2");
+            DeliveryReceipt receipt2 = service.assignLocker(medPkg);
+            service.depositPackage("PKG_002");
 
-        // Step 3: Customer arrives, enters their 6-digit PIN code, and pulls the item out
-        String customerInputCode = tokenA.getSecureCode();
-        lms.customerRetrievePackage(tokenA.getTokenId(), customerInputCode);
-        System.out.println();
+            try {
+                service.pickupPackage("PKG_002", "000000");   // wrong PIN
+            } catch (InvalidPinException e) {
+                System.out.println("Caught: " + e.getMessage());
+            }
 
-        // ====================================================================
-        // SCENARIO B: Timeout Eviction Flow (Expired Reservation/Occupancy)
-        // ====================================================================
-        System.out.println("--- Scenario B: Expiration Sweeper Flow ---");
+            // correct PIN still works after one wrong attempt
+            service.pickupPackage("PKG_002", receipt2.pin);
 
-        String packageB = "PKG-AMZN-112233";
-        // Reserve a Small locker
-        LockerToken tokenB = lms.reserveLockerForOrder("STN-BLR-01", packageB, LockerSize.S);
-        System.out.println("Order Placed. Reserved Locker ID: " + tokenB.getLockerId());
+            // --- no slot available ---
+            Package largePkg1 = new Package("PKG_003", Size.LARGE, "CUST_3");
+            Package largePkg2 = new Package("PKG_004", Size.LARGE, "CUST_4");
+            service.assignLocker(largePkg1);   // takes L1
 
-        // Courier drops it off
-        lms.confirmCourierDropoff(tokenB.getTokenId());
+            try {
+                service.assignLocker(largePkg2);   // no LARGE slot left
+            } catch (NoSlotAvailableException e) {
+                System.out.println("Caught: " + e.getMessage());
+            }
 
-        System.out.println("\n[System Simulation]: Simulating time jump past 3 days...");
-        // Fast-forwarding time directly inside our current registry token for testing
-        // Hacky override just for simulation without adding complex clock providers
-        try {
-            java.lang.reflect.Field expiryField = LockerToken.class.getDeclaredField("expiryTime");
-            expiryField.setAccessible(true);
-            expiryField.set(tokenB, LocalDateTime.now().minusDays(1)); // set past expiry
-        } catch (Exception e) {
-            System.out.println("Simulation reflection failed: " + e.getMessage());
+            // --- package not found ---
+            try {
+                service.depositPackage("PKG_GHOST");
+            } catch (PackageNotFoundException e) {
+                System.out.println("Caught: " + e.getMessage());
+            }
+
+            // --- invalid state transition ---
+            Package pkg5 = new Package("PKG_005", Size.SMALL, "CUST_5");
+            service.assignLocker(pkg5);   // slot is now RESERVED
+
+            try {
+                // trying to pickup before deposit — invalid
+                LockerSlot reservedSlot = slots.get(0);   // S1 is reserved
+                reservedSlot.pickup("123456");
+            } catch (InvalidStateTransitionException e) {
+                System.out.println("Caught: " + e.getMessage());
+            }
+
+            // --- maintenance flow ---
+            service.markSlotOutOfOrder("M1");
+            service.markSlotAvailable("M1");   // maintenance fixed it
         }
-
-        // Trigger the background sweeper job
-        System.out.println("Executing Cron Sweeper Engine Job...");
-        lms.sweepExpiredTimeouts();
-
-        // Verify locker availability restoration
-        System.out.println("\n--- Post-Sweep Invariant Check ---");
-        Locker lockerAfterSweep = bangaloreStation.getLocker(tokenB.getLockerId());
-        System.out.println("Locker " + lockerAfterSweep.getId() + " Current State: " + lockerAfterSweep.getState());
     }
-}
 
