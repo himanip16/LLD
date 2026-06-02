@@ -27,7 +27,7 @@ public class Main {
 
         // Step 3: Populate Structural Floor map configurations
         ParkingFloor f0 = new ParkingFloor(0);
-        f0.addSpot(new ParkingSpot("CAR-F0-01", 0, 10, VehicleType.CAR));
+        f0.addSpot(new ParkingSpot("CAR-F0-01", 0,  VehicleType.CAR));
         lot.addFloor(f0);
 
         // Step 4: Provision Distributed Gates
